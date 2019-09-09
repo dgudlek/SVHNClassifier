@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 import time
+import shutil
 import tensorflow as tf
 from meta import Meta
 from donkey import Donkey
@@ -31,8 +32,8 @@ def _train(path_to_train_tfrecords_file, num_train_examples, path_to_val_tfrecor
                                                                      num_examples=num_train_examples,
                                                                      batch_size=batch_size,
                                                                      shuffled=True)
-        length_logtis, digits_logits = Model.inference(image_batch, drop_rate=0.2)
-        loss = Model.loss(length_logtis, digits_logits, length_batch, digits_batch)
+        length_logits, digits_logits = Model.inference(image_batch, drop_rate=0.2)
+        loss = Model.loss(length_logits, digits_logits, length_batch, digits_batch)
 
         global_step = tf.Variable(0, name='global_step', trainable=False)
         learning_rate = tf.train.exponential_decay(training_options['learning_rate'], global_step=global_step,
@@ -83,6 +84,21 @@ def _train(path_to_train_tfrecords_file, num_train_examples, path_to_val_tfrecor
 
                 print '=> Evaluating on validation dataset...'
                 path_to_latest_checkpoint_file = saver.save(sess, os.path.join(path_to_train_log_dir, 'latest.ckpt'))
+
+                saved_model_path = os.path.join(path_to_train_log_dir, 'saved')
+                shutil.rmtree(saved_model_path, ignore_errors=True)
+                tf.compat.v1.saved_model.simple_save(
+                        sess,
+                        saved_model_path,
+                        inputs={
+                            "image_batch": image_batch,
+                        },
+                        outputs={
+                            "length_logits": length_logits,
+                            "digits_logits": digits_logits,
+                        })
+                saver.save(sess, os.path.join(path_to_train_log_dir, 'latest.ckpt'))
+
                 accuracy = evaluator.evaluate(path_to_latest_checkpoint_file, path_to_val_tfrecords_file,
                                               num_val_examples,
                                               global_step_val)
